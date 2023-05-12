@@ -1,10 +1,12 @@
 ﻿using Rocket.Unturned.Player;
+using UnityEngine;
 
 namespace SBAdvancedTeleportation.Models
 {
     public class TpaRequest
     {
-        public UnturnedPlayer sender { get; set; }
-        public UnturnedPlayer target { get; set; }
+        public UnturnedPlayer Sender { get; set; }
+        public UnturnedPlayer Target { get; set; }
+        public Coroutine Coroutine { get; set; }
     }
 }

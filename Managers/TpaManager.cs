@@ -1,22 +1,22 @@
-﻿using Rocket.Unturned.Chat;
-using Rocket.Unturned.Events;
-using Rocket.Unturned.Player;
-using SBAdvancedTeleportation.Managers;
-using SBAdvancedTeleportation.Models;
-using SDG.Unturned;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Rocket.Unturned.Chat;
+using Rocket.Unturned.Events;
+using Rocket.Unturned.Player;
+using SBAdvancedTeleportation.Models;
+using SDG.Unturned;
 using UnityEngine;
 using Logger = Rocket.Core.Logging.Logger;
 
-namespace SBAdvancedTeleportation.Components
+namespace SBAdvancedTeleportation.Managers
 {
-    public class TpaComponent : MonoBehaviour
+    public class TpaManager
     {
         public List<TpaRequest> Requests { get; set; }
 
-        public void Start()
+        public void Instantiate()
         {
             Requests = new List<TpaRequest>();
             UnturnedPlayerEvents.OnPlayerDeath += OnPlayerDeath;
@@ -29,7 +29,7 @@ namespace SBAdvancedTeleportation.Components
                 var shouldRemove = (request.Target.CSteamID == player.CSteamID || request.Sender.CSteamID == player.CSteamID) && request.Coroutine != null;
                 if (shouldRemove)
                 {
-                    StopCoroutine(request.Coroutine);
+                    AdvancedTeleportationPlugin.Instance.StopCoroutine(request.Coroutine);
                     UnturnedChat.Say(request.Sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
                     UnturnedChat.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
                 }
@@ -37,7 +37,7 @@ namespace SBAdvancedTeleportation.Components
             });
         }
 
-        public void OnDestroy()
+        public void Destroy()
         {
             UnturnedPlayerEvents.OnPlayerDeath -= OnPlayerDeath;
         }
@@ -94,7 +94,7 @@ namespace SBAdvancedTeleportation.Components
                     Logger.Log("Making Enumerator");
                     var Enumerator = TeleportEnumerator(delay, request);
                     Logger.Log("Starting Coroutine and setting request");
-                    request.Coroutine = StartCoroutine(Enumerator);
+                    request.Coroutine = AdvancedTeleportationPlugin.Instance.StartCoroutine(Enumerator);
                     Logger.Log("Done");
                 }
             }
@@ -143,7 +143,7 @@ namespace SBAdvancedTeleportation.Components
                 var match = request.Sender.CSteamID == player.CSteamID;
                 if (match && request.Coroutine != null)
                 {
-                    StopCoroutine(request.Coroutine);
+                    AdvancedTeleportationPlugin.Instance.StopCoroutine(request.Coroutine);
                     UnturnedChat.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
                 }
                 return match;

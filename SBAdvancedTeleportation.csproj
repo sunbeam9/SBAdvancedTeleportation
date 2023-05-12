@@ -78,7 +78,7 @@
     <Compile Include="Commands\TpaCommand.cs" />
     <Compile Include="Components\TpaComponent.cs" />
     <Compile Include="Managers\DatabaseManager.cs" />
-    <Compile Include="Models\PlayerPreferences.cs" />
+    <Compile Include="Models\MockDatabase.cs" />
     <Compile Include="Models\TpaRequest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
