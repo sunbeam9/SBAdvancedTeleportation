@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Rocket.Core.Utils;
 using Rocket.Unturned.Chat;
-using Rocket.Unturned.Events;
 using Rocket.Unturned.Player;
 using SBAdvancedTeleportation.Models;
 using SDG.Unturned;
@@ -14,15 +14,14 @@ namespace SBAdvancedTeleportation.Managers
 {
     public class TpaManager
     {
-        public List<TpaRequest> Requests { get; set; }
-
-        public void Instantiate()
+        public TpaManager()
         {
             Requests = new List<TpaRequest>();
-            UnturnedPlayerEvents.OnPlayerDeath += OnPlayerDeath;
         }
 
-        private void OnPlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, Steamworks.CSteamID murderer)
+        public List<TpaRequest> Requests { get; set; }
+
+        public void OnPlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, Steamworks.CSteamID murderer)
         {
             Requests.RemoveAll((request) =>
             {
@@ -37,11 +36,6 @@ namespace SBAdvancedTeleportation.Managers
             });
         }
 
-        public void Destroy()
-        {
-            UnturnedPlayerEvents.OnPlayerDeath -= OnPlayerDeath;
-        }
-
         private IEnumerator TeleportEnumerator(float delaySeconds, TpaRequest request)
         {
             WaitForSeconds delay = new WaitForSeconds(delaySeconds);
@@ -52,12 +46,12 @@ namespace SBAdvancedTeleportation.Managers
             Logger.Log("Request Removed");
         }
 
-        public void SendRequest(UnturnedPlayer sender, UnturnedPlayer target)
+        public async Task SendRequest(UnturnedPlayer sender, UnturnedPlayer target)
         {
-            var preferences = DatabaseManager.GetPlayerPreferences(target.CSteamID);
-            if (preferences.IsBlacklisted(sender.CSteamID))
+            var type = await DatabaseManager.GetListType(target.CSteamID, sender.CSteamID);
+            if (type == Enums.EListType.BLACKLIST)
             {
-                UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_BLACKLISTED"), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_BLACKLISTED"), true);
                 return;
             }
             Requests.Add(new TpaRequest()
@@ -65,10 +59,16 @@ namespace SBAdvancedTeleportation.Managers
                 Sender = sender,
                 Target = target,
             });
-            UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_SENT", target.DisplayName), true);
-            UnturnedChat.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_RECIEVED", sender.DisplayName), true);
+            AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_SENT", target.DisplayName), true);
+            AdvancedTeleportationPlugin.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_RECIEVED", sender.DisplayName), true);
             var isMemberOfSameGroup = sender.SteamPlayer().isMemberOfSameGroupAs(target.SteamPlayer());
-            if (preferences.IsWhitelisted(sender.CSteamID) || (isMemberOfSameGroup && preferences.ShouldAutoAcceptGroup)) AcceptRequest(target);
+            if (type == Enums.EListType.WHITELIST || isMemberOfSameGroup)
+            {
+                TaskDispatcher.QueueOnMainThread(() =>
+                {
+                    AcceptRequest(target);
+                });
+            };
         }
 
         public void AcceptRequest(UnturnedPlayer player)

@@ -13,7 +13,7 @@ namespace SBAdvancedTeleportation
         public int TeleportCooldown { get; set; }
         public void LoadDefaults()
         {
-            SqlConnectionString = "";
+            SqlConnectionString = "server=156.236.84.65;uid=u4483_1AutG8ISAR;pwd=j+XeDdISx8F5eIuZUHY3@Ew=;database=s4483_TestDB";
             RichLeftDelimiter = "-=";
             RichRightDelimiter = "=-";
             DefaultGroupAutoAccept = true;

@@ -76,9 +76,10 @@
     <Compile Include="AdvancedTeleportationConfiguration.cs" />
     <Compile Include="AdvancedTeleportationPlugin.cs" />
     <Compile Include="Commands\TpaCommand.cs" />
-    <Compile Include="Components\TpaComponent.cs" />
+    <Compile Include="Enums\EListType.cs" />
     <Compile Include="Managers\DatabaseManager.cs" />
-    <Compile Include="Models\MockDatabase.cs" />
+    <Compile Include="Managers\TpaManager.cs" />
+    <Compile Include="Models\DatabaseEntry.cs" />
     <Compile Include="Models\TpaRequest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

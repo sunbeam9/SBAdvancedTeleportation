@@ -5,8 +5,10 @@ using System.Text;
 using System.Threading.Tasks;
 using Rocket.API;
 using Rocket.Core.Logging;
+using Rocket.Core.Utils;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
+using SBAdvancedTeleportation.Enums;
 using SBAdvancedTeleportation.Managers;
 using SBAdvancedTeleportation.Models;
 using SDG.Unturned;
@@ -21,7 +23,7 @@ namespace SBAdvancedTeleportation.Commands
 
         public string Help => "Sends/Accepts/Cancels/Denies a teleportation request to a player";
 
-        public string Syntax => "<accept/cancel/deny/list/whitelist/blacklist> (player)";
+        public string Syntax => "<accept/cancel/deny/list/whitelist/blacklist/reset> (player)";
 
         public List<string> Aliases => new List<string>();
 
@@ -38,8 +40,8 @@ namespace SBAdvancedTeleportation.Commands
                 UnturnedChat.Say(player.CSteamID, $"Incorrect syntax: /tpa {Syntax}", color: UnityEngine.Color.red);
                 return;
             }
+
             var type = command[0];
-            Logger.Log($"type: {type}");
             switch (type)
             {
                 case "a":
@@ -59,82 +61,76 @@ namespace SBAdvancedTeleportation.Commands
                     break;
                 case "w":
                 case "whitelist":
-                    WhitelistPlayer(player, command);
+                case "b":
+                case "blacklist":
+                case "r":
+                case "reset":
+                    Task.Run(async () =>
+                    {
+                        await WhitelistBlacklistResetPlayer(player, command);
+                    });
+                    break;
+                default:
+                    Task.Run(async () =>
+                    {
+                        await SendRequest(player, command);
+                    });
+                    break;
+            }
+        }
+
+        private async Task WhitelistBlacklistResetPlayer(UnturnedPlayer player, string[] command)
+        {
+            if (command.Length < 2)
+            {
+                AdvancedTeleportationPlugin.Say(player.CSteamID, $"<color=red>Incorrect syntax: /tpa {command[0]} <player></color=red>", true);
+                return;
+            }
+            var target = UnturnedPlayer.FromName(command[1]);
+            if (target == null)
+            {
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[1]), true);
+                return;
+            }
+            EListType listType;
+            switch (command[0])
+            {
+                case "w":
+                case "whitelist":
+                    listType = EListType.WHITELIST;
                     break;
                 case "b":
                 case "blacklist":
-                    BlacklistPlayer(player, command);
+                    listType = EListType.BLACKLIST;
                     break;
+                case "r":
+                case "reset":
                 default:
-                    SendRequest(player, command);
+                    listType = EListType.NONE;
                     break;
             }
-        }
-
-        private void BlacklistPlayer(UnturnedPlayer player, string[] command)
-        {
-            if (command.Length < 3)
-                UnturnedChat.Say(player.CSteamID, $"Incorrect syntax: /tpa blacklist <add/remove> <player>", color: UnityEngine.Color.red);
-            else
-            {
-                var target = UnturnedPlayer.FromName(command[2].ToLower());
-                if (target == null)
-                {
-                    UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[1]), true);
-                }
-                else
-                {
-                    var type = command[1];
-                    switch(type)
-                    {
-                        case "a":
-                        case "add":
-                            break;
-                        case "r":
-                        case "d":
-                        case "delete":
-                        case "remove":
-                            break;
-                    }
-                }
-            }
-        }
-
-        private void WhitelistPlayer(UnturnedPlayer player, string[] command)
-        {
-            if (command.Length < 3)
-                UnturnedChat.Say(player.CSteamID, $"Incorrect syntax: /tpa whitelist <add/remove> <player>", color: UnityEngine.Color.red);
-            else
-            {
-                var target = UnturnedPlayer.FromName(command[2].ToLower());
-                if (target == null)
-                {
-                    UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[1]), true);
-                }
-                else
-                {
-                }
-            }
+            await DatabaseManager.UpsertListType(player.CSteamID, target.CSteamID, listType);
+            AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_LIST_UPDATED", listType.ToString().ToLower(), target.DisplayName), true);
         }
 
         private void CancelAllRequests(UnturnedPlayer player)
         {
-            AdvancedTeleportationPlugin.Instance.TpaComponent.CancelAllRequests(player);
+            AdvancedTeleportationPlugin.Instance.TpaManager.CancelAllRequests(player);
         }
 
         private void AcceptRequest(UnturnedPlayer player)
         {
-            AdvancedTeleportationPlugin.Instance.TpaComponent.AcceptRequest(player);
+            AdvancedTeleportationPlugin.Instance.TpaManager.AcceptRequest(player);
         }
 
         private void DenyRequest(UnturnedPlayer player)
         {
-            AdvancedTeleportationPlugin.Instance.TpaComponent.DenyRequest(player);
+            AdvancedTeleportationPlugin.Instance.TpaManager.DenyRequest(player);
         }
 
         private void ListRequests(UnturnedPlayer player)
         {
-            var requests = AdvancedTeleportationPlugin.Instance.TpaComponent.GetRequests(player);
+            var requests = AdvancedTeleportationPlugin.Instance.TpaManager.GetRequests(player);
             if (requests == null)
             {
                 UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NOT_FOUND"), true);
@@ -150,25 +146,25 @@ namespace SBAdvancedTeleportation.Commands
             }
         }
 
-        private void SendRequest(UnturnedPlayer sender, string[] command)
+        private async Task SendRequest(UnturnedPlayer sender, string[] command)
         {
             if (AdvancedTeleportationPlugin.Instance.HasCooldown(sender.CSteamID, out TimeSpan timeLeft))
-                UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("COMMAND_COOLDOWN", (int)timeLeft.TotalSeconds), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("COMMAND_COOLDOWN", (int)timeLeft.TotalSeconds), true);
             else
             {
                 var target = UnturnedPlayer.FromName(command[0].ToLower());
                 if (target == null)
                 {
-                    UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[0]), true);
+                    AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[0]), true);
                 }
                 else
                 {
-                    if (AdvancedTeleportationPlugin.Instance.TpaComponent.Requests.Any((request) => request.Sender.CSteamID == sender.CSteamID && request.Target.CSteamID == target.CSteamID))
-                        UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ALREADY_SENT", target.DisplayName), true);
+                    if (AdvancedTeleportationPlugin.Instance.TpaManager.Requests.Any((request) => request.Sender.CSteamID == sender.CSteamID && request.Target.CSteamID == target.CSteamID))
+                        AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ALREADY_SENT", target.DisplayName), true);
                     else
                     {
                         AdvancedTeleportationPlugin.Instance.RegisterCooldown(sender.CSteamID);
-                        AdvancedTeleportationPlugin.Instance.TpaComponent.SendRequest(sender, target);
+                        await AdvancedTeleportationPlugin.Instance.TpaManager.SendRequest(sender, target);
                     }
                 }
             }

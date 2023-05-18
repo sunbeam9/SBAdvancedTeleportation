@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Rocket.API.Collections;
 using Rocket.Core.Logging;
 using Rocket.Core.Plugins;
-using SBAdvancedTeleportation.Components;
+using Rocket.Core.Utils;
+using Rocket.Unturned.Chat;
+using Rocket.Unturned.Events;
+using SBAdvancedTeleportation.Managers;
 using SBAdvancedTeleportation.Models;
 using Steamworks;
 
@@ -22,8 +26,8 @@ namespace SBAdvancedTeleportation
 (____/ (__)   (___/(______)(_)\_)  (____/(____)(__)(__)(_/\/\_)                 
 ";
         public static AdvancedTeleportationPlugin Instance { get; set; }
-        public TpaComponent TpaComponent { get; set; }
         public Dictionary<CSteamID, DateTime> Cooldowns { get; set; }
+        public TpaManager TpaManager {get; set;}
 
         public bool HasCooldown(CSteamID steamID, out TimeSpan timeLeft)
         {
@@ -49,8 +53,8 @@ namespace SBAdvancedTeleportation
         public override TranslationList DefaultTranslations => new TranslationList()
         {
             {"PLAYER_NOT_FOUND", "-=color=yellow=-Couldn't find a player named {0}.-=/color=-" },
-            {"REQUEST_SENT", "-=color=yellow=-Succesfully sent a tpa request to {0}.-=/color=-" },
-            {"REQUEST_RECIEVED", "-=color=yellow=-You recieved a tpa request from {0}.-=/color=-" },
+            {"REQUEST_SENT", "-=color=yellow=-Successfully sent a tpa request to {0}.-=/color=-" },
+            {"REQUEST_RECIEVED", "-=color=yellow=-You received a tpa request from {0}.-=/color=-" },
             {"REQUESTS_NOT_FOUND", "-=color=yellow=-You have no tpa requests.-=/color=-" },
             {"REQUESTS_FOUND", "-=color=yellow=-You have {0} tpa requests.-=/color=-" },
             {"REQUEST_BLACKLISTED", "-=color=red=-Your tpa request was ignored.-=/color=-" },
@@ -63,8 +67,7 @@ namespace SBAdvancedTeleportation
             {"REQUEST_ALREADY_SENT", "You have already sent a tpa request to {0}." },
             {"REQUEST_DENIED_TARGET", "You denied {0}'s tpa request." },
             {"REQUEST_DENIED_SENDER", "{0} denied your tpa request." },
-            {"PLAYER_BLACKLISTED", "Successfully blacklisted {0}." },
-            {"PLAYER_WHITELISTED", "Successfully whitelisted {0}." },
+            {"PLAYER_LIST_UPDATED", "Successfully {0} {1}." },
             {"PLAYER_TELEPORTED_SENDER", "You were teleported to {0}." },
             {"PLAYER_TELEPORTED_TARGET", "{0} was teleported to you." },
             {"PLAYER_TELEPORTATION_FAILED_SENDER", "Failed to teleport you to {0}." },
@@ -83,13 +86,30 @@ namespace SBAdvancedTeleportation
             Logger.Log(LoadUnloadMessage);
             Instance = this;
             Cooldowns = new Dictionary<CSteamID, DateTime>();
-            MockDatabase.Initalize();
-            TpaComponent = gameObject.AddComponent<TpaComponent>();
+            TpaManager = new TpaManager();
+            UnturnedPlayerEvents.OnPlayerDeath += TpaManager.OnPlayerDeath;
+
+            Task.Run(async () =>
+            {
+                await DatabaseManager.InitializeDatabase();
+                TaskDispatcher.QueueOnMainThread(() =>
+                {
+                    UnloadPlugin();
+                });
+            });
         }
 
         protected override void Unload()
         {
-            Logger.Log(LoadUnloadMessage);
+            UnturnedPlayerEvents.OnPlayerDeath -= TpaManager.OnPlayerDeath;
+        }
+
+        public static void Say(CSteamID target, string message, bool rich)
+        {
+            TaskDispatcher.QueueOnMainThread(() =>
+            {
+                UnturnedChat.Say(target, message, rich);
+            });
         }
     }
 }
