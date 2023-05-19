@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Rocket.API;
-using Rocket.Core.Logging;
-using Rocket.Core.Utils;
-using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
 using SBAdvancedTeleportation.Enums;
 using SBAdvancedTeleportation.Managers;
 using SBAdvancedTeleportation.Models;
-using SDG.Unturned;
 
 namespace SBAdvancedTeleportation.Commands
 {
@@ -37,7 +32,7 @@ namespace SBAdvancedTeleportation.Commands
             if (caller is not UnturnedPlayer player) return;
             if (command.Length < 1)
             {
-                UnturnedChat.Say(player.CSteamID, $"Incorrect syntax: /tpa {Syntax}", color: UnityEngine.Color.red);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, $"Incorrect syntax: /tpa {Syntax}", color: UnityEngine.Color.red, rich: false);
                 return;
             }
 
@@ -83,13 +78,13 @@ namespace SBAdvancedTeleportation.Commands
         {
             if (command.Length < 2)
             {
-                AdvancedTeleportationPlugin.Say(player.CSteamID, $"<color=red>Incorrect syntax: /tpa {command[0]} <player></color=red>", true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, $"Incorrect syntax: /tpa {command[0]} <player>", color: UnityEngine.Color.red, rich: false);
                 return;
             }
             var target = UnturnedPlayer.FromName(command[1]);
             if (target == null)
             {
-                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[1]), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[1]));
                 return;
             }
             EListType listType;
@@ -106,11 +101,11 @@ namespace SBAdvancedTeleportation.Commands
                 case "r":
                 case "reset":
                 default:
-                    listType = EListType.NONE;
+                    listType = EListType.RESET;
                     break;
             }
             await DatabaseManager.UpsertListType(player.CSteamID, target.CSteamID, listType);
-            AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_LIST_UPDATED", listType.ToString().ToLower(), target.DisplayName), true);
+            AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_LIST_UPDATED", listType.ToString().ToLower(), target.DisplayName));
         }
 
         private void CancelAllRequests(UnturnedPlayer player)
@@ -133,15 +128,15 @@ namespace SBAdvancedTeleportation.Commands
             var requests = AdvancedTeleportationPlugin.Instance.TpaManager.GetRequests(player);
             if (requests == null)
             {
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NOT_FOUND"), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NOT_FOUND"));
             }
             else
             {
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_FOUND", requests.Count), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_FOUND", requests.Count));
                 int i = 0;
                 foreach (TpaRequest request in requests)
                 {
-                    UnturnedChat.Say(player.CSteamID, $"{i++}: {request.Sender.DisplayName}");
+                    AdvancedTeleportationPlugin.Say(player.CSteamID, $"{i++}: {request.Sender.DisplayName}");
                 }
             }
         }
@@ -149,18 +144,22 @@ namespace SBAdvancedTeleportation.Commands
         private async Task SendRequest(UnturnedPlayer sender, string[] command)
         {
             if (AdvancedTeleportationPlugin.Instance.HasCooldown(sender.CSteamID, out TimeSpan timeLeft))
-                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("COMMAND_COOLDOWN", (int)timeLeft.TotalSeconds), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("COMMAND_COOLDOWN", (int)timeLeft.TotalSeconds));
             else
             {
                 var target = UnturnedPlayer.FromName(command[0].ToLower());
                 if (target == null)
                 {
-                    AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[0]), true);
+                    AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_NOT_FOUND", command[0]));
+                }
+                else if (target.CSteamID == sender.CSteamID)
+                {
+                    AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("CANNOT_REQUEST_SELF"), UnityEngine.Color.red);
                 }
                 else
                 {
                     if (AdvancedTeleportationPlugin.Instance.TpaManager.Requests.Any((request) => request.Sender.CSteamID == sender.CSteamID && request.Target.CSteamID == target.CSteamID))
-                        AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ALREADY_SENT", target.DisplayName), true);
+                        AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ALREADY_SENT", target.DisplayName));
                     else
                     {
                         AdvancedTeleportationPlugin.Instance.RegisterCooldown(sender.CSteamID);

@@ -1,9 +1,8 @@
 ﻿using System;
-using System.Data.SqlClient;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using MySql.Data.MySqlClient;
 using Rocket.Core.Logging;
 using SBAdvancedTeleportation.Enums;
 using SBAdvancedTeleportation.Models;
@@ -15,20 +14,22 @@ namespace SBAdvancedTeleportation.Managers
     {
         public static string TableName = "SBAdvancedTeleportation";
 
-        public static async Task InitializeDatabase()
+        public static async Task<bool> InitializeDatabase()
         {
             try
             {
-                using (var connection = new SqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
+                using (var connection = new MySqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
                 {
-                    var query = $"CREATE TABLE IF NOT EXISTS {TableName};";
+                    var query = $"CREATE TABLE IF NOT EXISTS {TableName} (PlayerID BIGINT(17) UNSIGNED NOT NULL, TargetID BIGINT(17) UNSIGNED NOT NULL, ListType INT(1), PRIMARY KEY (PlayerID, TargetID));";
                     await connection.QueryAsync(query);
                 }
+                return true;
             }
             catch (Exception e)
             {
                 Logger.LogError($"[SBAdvancedTeleportation] [ERROR] DatabaseManager_InitializeDatabase: {e.Message}");
                 Logger.LogError($"[SBAdvancedTeleportation] [ERROR] Details: {e}");
+                return false;
             }
         }
 
@@ -37,16 +38,16 @@ namespace SBAdvancedTeleportation.Managers
             try
             {
                 EListType type;
-                using (var connection = new SqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
+                using (var connection = new MySqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
                 {
-                    var query = $"SELECT * FROM {TableName} WHERE PlayerID = @playerID;";
+                    var query = $"SELECT * FROM {TableName} WHERE PlayerID = @PlayerID AND TargetID = @TargetID;";
                     var result = await connection.QueryAsync<DatabaseEntry>(query, new { PlayerID = player.m_SteamID, TargetID = target.m_SteamID });
                     type = result
                         .DefaultIfEmpty(new DatabaseEntry()
                         {
                             PlayerID = player.m_SteamID,
                             TargetID = target.m_SteamID,
-                            ListType = EListType.NONE,
+                            ListType = EListType.RESET,
                         })
                         .First()
                         .ListType;
@@ -57,7 +58,7 @@ namespace SBAdvancedTeleportation.Managers
             {
                 Logger.LogError($"[SBAdvancedTeleportation] [ERROR] DatabaseManager_GetListType: {e.Message}");
                 Logger.LogError($"[SBAdvancedTeleportation] [ERROR] Details: {e}");
-                return EListType.NONE;
+                return EListType.RESET;
             }
         }
 
@@ -65,9 +66,13 @@ namespace SBAdvancedTeleportation.Managers
         {
             try
             {
-                using (var connection = new SqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
+                using (var connection = new MySqlConnection(AdvancedTeleportationPlugin.Instance.Configuration.Instance.SqlConnectionString))
                 {
-                    var query = $"INSERT INTO {TableName} (PlayerID, TargetID, ListType) VALUES (@PlayerID, @TargetID, @ListType) ON DUPLICATE KEY UPDATE ListType=@ListType;";
+                    string query;
+                    if (listType == EListType.RESET)
+                        query = $"DELETE FROM {TableName} WHERE PlayerID = @PlayerID AND TargetID = @TargetID;";
+                    else
+                        query = $"INSERT INTO {TableName} (PlayerID, TargetID, ListType) VALUES (@PlayerID, @TargetID, @ListType) ON DUPLICATE KEY UPDATE ListType=@ListType;";
                     await connection.QueryAsync<DatabaseEntry>(query, new { PlayerID = player.m_SteamID, TargetID = target.m_SteamID, ListType = listType });
                 }
             }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Rocket.API.Collections;
 using Rocket.Core.Logging;
@@ -8,7 +10,7 @@ using Rocket.Core.Utils;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Events;
 using SBAdvancedTeleportation.Managers;
-using SBAdvancedTeleportation.Models;
+using SDG.Unturned;
 using Steamworks;
 
 namespace SBAdvancedTeleportation
@@ -27,7 +29,7 @@ namespace SBAdvancedTeleportation
 ";
         public static AdvancedTeleportationPlugin Instance { get; set; }
         public Dictionary<CSteamID, DateTime> Cooldowns { get; set; }
-        public TpaManager TpaManager {get; set;}
+        public TpaManager TpaManager { get; set; }
 
         public bool HasCooldown(CSteamID steamID, out TimeSpan timeLeft)
         {
@@ -60,8 +62,6 @@ namespace SBAdvancedTeleportation
             {"REQUEST_BLACKLISTED", "-=color=red=-Your tpa request was ignored.-=/color=-" },
             {"REQUEST_ACCEPTED_SENDER", "-=color=green=-{0} accepted your tpa request." },
             {"REQUEST_ACCEPTED_TARGET", "-=color=green=-Accepted {0}'s tpa request." },
-            {"REQUEST_ACCEPTED_TIMER_SENDER", "You will be teleported in {0} seconds" },
-            {"REQUEST_ACCEPTED_TIMER_TARGET", "They will be teleported in {0} seconds" },
             {"REQUESTS_CANCELED", "Canceled all outgoing tpa requests." },
             {"REQUESTS_NONE", "You have no tpa requests." },
             {"REQUEST_ALREADY_SENT", "You have already sent a tpa request to {0}." },
@@ -74,8 +74,9 @@ namespace SBAdvancedTeleportation
             {"PLAYER_TELEPORTATION_FAILED_TARGET", "Failed to teleport {0} to you." },
             {"REQUEST_CANCELED", "The tpa request was canceled." },
             {"COMMAND_COOLDOWN", "You cannot send a tpa request for another {0} seconds." },
+            {"CANNOT_REQUEST_SELF", "You cannot send a tpa request to youself." }
         };
-
+        
         public static string TranslateRich(string translationKey, params object[] placeholder)
         {
             return Instance.Translate(translationKey, placeholder).Replace(Instance.Configuration.Instance.RichLeftDelimiter, "<").Replace(Instance.Configuration.Instance.RichRightDelimiter, ">");
@@ -91,11 +92,9 @@ namespace SBAdvancedTeleportation
 
             Task.Run(async () =>
             {
-                await DatabaseManager.InitializeDatabase();
-                TaskDispatcher.QueueOnMainThread(() =>
-                {
-                    UnloadPlugin();
-                });
+                var failed = await DatabaseManager.InitializeDatabase();
+                if (!failed)
+                    TaskDispatcher.QueueOnMainThread(() => UnloadPlugin());
             });
         }
 
@@ -104,12 +103,30 @@ namespace SBAdvancedTeleportation
             UnturnedPlayerEvents.OnPlayerDeath -= TpaManager.OnPlayerDeath;
         }
 
-        public static void Say(CSteamID target, string message, bool rich)
+        public static void Say(CSteamID target, string message, bool rich = true)
         {
-            TaskDispatcher.QueueOnMainThread(() =>
-            {
+            var isOnline = IsOnline(target);
+            if (ThreadUtil.IsGameThread(Thread.CurrentThread) && isOnline)
                 UnturnedChat.Say(target, message, rich);
-            });
+            else if (isOnline)
+                TaskDispatcher.QueueOnMainThread(() => UnturnedChat.Say(target, message, rich));
+            else
+                Logger.Log($"Failed to send message \"{message}\" to player {target}.");
+        }
+        public static void Say(CSteamID target, string message, UnityEngine.Color color, bool rich = true)
+        {
+            var isOnline = IsOnline(target);
+            if (ThreadUtil.IsGameThread(Thread.CurrentThread) && isOnline)
+                UnturnedChat.Say(target, message, color, rich);
+            else if (isOnline)
+                TaskDispatcher.QueueOnMainThread(() => UnturnedChat.Say(target, message, color, rich));
+            else
+                Logger.Log($"Failed to send message \"{message}\" to player {target}.");
+        }
+
+        public static bool IsOnline(CSteamID player)
+        {
+            return Provider.clients.Any((SteamPlayer p) => p.playerID.steamID == player);
         }
     }
 }

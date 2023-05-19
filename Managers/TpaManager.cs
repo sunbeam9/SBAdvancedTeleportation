@@ -1,12 +1,13 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Rocket.Core.Utils;
-using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
 using SBAdvancedTeleportation.Models;
 using SDG.Unturned;
+using Steamworks;
 using UnityEngine;
 using Logger = Rocket.Core.Logging.Logger;
 
@@ -20,6 +21,7 @@ namespace SBAdvancedTeleportation.Managers
         }
 
         public List<TpaRequest> Requests { get; set; }
+        public Dictionary<CSteamID, Coroutine> PvpTimers { get; set; }
 
         public void OnPlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, Steamworks.CSteamID murderer)
         {
@@ -29,8 +31,8 @@ namespace SBAdvancedTeleportation.Managers
                 if (shouldRemove)
                 {
                     AdvancedTeleportationPlugin.Instance.StopCoroutine(request.Coroutine);
-                    UnturnedChat.Say(request.Sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
-                    UnturnedChat.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
+                    AdvancedTeleportationPlugin.Say(request.Sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"));
+                    AdvancedTeleportationPlugin.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"));
                 }
                 return shouldRemove;
             });
@@ -51,7 +53,7 @@ namespace SBAdvancedTeleportation.Managers
             var type = await DatabaseManager.GetListType(target.CSteamID, sender.CSteamID);
             if (type == Enums.EListType.BLACKLIST)
             {
-                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_BLACKLISTED"), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_BLACKLISTED"));
                 return;
             }
             Requests.Add(new TpaRequest()
@@ -59,8 +61,8 @@ namespace SBAdvancedTeleportation.Managers
                 Sender = sender,
                 Target = target,
             });
-            AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_SENT", target.DisplayName), true);
-            AdvancedTeleportationPlugin.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_RECIEVED", sender.DisplayName), true);
+            AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_SENT", target.DisplayName));
+            AdvancedTeleportationPlugin.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_RECIEVED", sender.DisplayName));
             var isMemberOfSameGroup = sender.SteamPlayer().isMemberOfSameGroupAs(target.SteamPlayer());
             if (type == Enums.EListType.WHITELIST || isMemberOfSameGroup)
             {
@@ -75,13 +77,13 @@ namespace SBAdvancedTeleportation.Managers
         {
             var request = Requests.LastOrDefault((request) => request.Target.CSteamID == player.CSteamID && request.Coroutine == null);
             if (request == null)
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NONE"), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NONE"));
             else
             {
                 var sender = request.Sender;
                 var delay = AdvancedTeleportationPlugin.Instance.Configuration.Instance.TeleportDelay;
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_TARGET", sender.DisplayName), true);
-                UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_SENDER", player.DisplayName), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_TARGET", sender.DisplayName));
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_SENDER", player.DisplayName));
                 if (delay <= 0)
                 {
                     TeleportPlayerToPlayerWithMessage(sender, request.Target);
@@ -89,8 +91,6 @@ namespace SBAdvancedTeleportation.Managers
                 }
                 else
                 {
-                    UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_TIMER_TARGET", delay), true);
-                    UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_ACCEPTED_TIMER_SENDER", delay), true);
                     Logger.Log("Making Enumerator");
                     var Enumerator = TeleportEnumerator(delay, request);
                     Logger.Log("Starting Coroutine and setting request");
@@ -113,13 +113,13 @@ namespace SBAdvancedTeleportation.Managers
             var successful = TeleportPlayerToPlayer(sender, target);
             if (successful)
             {
-                UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTED_SENDER", target.DisplayName), true);
-                UnturnedChat.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTED_TARGET", sender.DisplayName), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTED_SENDER", target.DisplayName));
+                AdvancedTeleportationPlugin.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTED_TARGET", sender.DisplayName));
             }
             else
             {
-                UnturnedChat.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTATION_FAILED_SENDER", target.DisplayName), true);
-                UnturnedChat.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTATION_FAILED_TARGET", sender.DisplayName), true);
+                AdvancedTeleportationPlugin.Say(sender.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTATION_FAILED_SENDER", target.DisplayName));
+                AdvancedTeleportationPlugin.Say(target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("PLAYER_TELEPORTATION_FAILED_TARGET", sender.DisplayName));
             }
         }
 
@@ -127,12 +127,12 @@ namespace SBAdvancedTeleportation.Managers
         {
             var request = Requests.LastOrDefault((request) => request.Target.CSteamID == player.CSteamID);
             if (request == null)
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NONE"), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_NONE"), true);
             else
             {
                 Requests.Remove(request);
-                UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_DENIED_TARGET", request.Sender.DisplayName), true);
-                UnturnedChat.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_DENIED_SENDER", player.DisplayName), true);
+                AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_DENIED_TARGET", request.Sender.DisplayName));
+                AdvancedTeleportationPlugin.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_DENIED_SENDER", player.DisplayName));
             }
         }
 
@@ -144,16 +144,21 @@ namespace SBAdvancedTeleportation.Managers
                 if (match && request.Coroutine != null)
                 {
                     AdvancedTeleportationPlugin.Instance.StopCoroutine(request.Coroutine);
-                    UnturnedChat.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"), true);
+                    AdvancedTeleportationPlugin.Say(request.Target.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUEST_CANCELED"));
                 }
                 return match;
             });
-            UnturnedChat.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_CANCELED"), true);
+            AdvancedTeleportationPlugin.Say(player.CSteamID, AdvancedTeleportationPlugin.TranslateRich("REQUESTS_CANCELED"));
         }
 
         public List<TpaRequest> GetRequests(UnturnedPlayer player)
         {
             return Requests.Where((request) => request.Target.CSteamID == player.CSteamID).ToList();
+        }
+
+        public void OnPlayerDamageRequested(ref DamagePlayerParameters parameters, ref bool shouldAllow)
+        {
+            throw new NotImplementedException();
         }
     }
 }

@@ -4,6 +4,6 @@
     {
         WHITELIST,
         BLACKLIST,
-        NONE,
+        RESET,
     }
 }
